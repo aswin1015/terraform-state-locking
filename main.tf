@@ -100,6 +100,17 @@ module "storage" {
   tags                       = local.common_tags
 }
 
+module "doc_intelligence" {
+  source = "./modules/doc-intelligence"
+
+  resource_group_name        = module.resource_group.name
+  location                   = module.resource_group.location
+  name                       = var.doc_intelligence_name
+  private_endpoint_subnet_id = module.networking.subnet_ids["pe-subnet"]
+  vnet_id                    = module.networking.vnet_id
+  tags                       = local.common_tags
+}
+
 module "communication" {
   source = "./modules/communication"
 
@@ -120,8 +131,12 @@ module "function_app" {
   name                             = var.function_app_name
   storage_account_name             = module.storage.account_name
   storage_account_access_key       = module.storage.primary_access_key
+  storage_connection_string        = module.storage.primary_connection_string
   cosmosdb_connection_string       = module.cosmosdb.mongodb_connection_string
   communication_service_connection = module.communication.primary_connection_string
+  acs_sender_address               = var.acs_sender_address
+  form_recognizer_endpoint         = module.doc_intelligence.endpoint
+  form_recognizer_key              = module.doc_intelligence.primary_key
   vnet_integration_subnet_id       = module.networking.subnet_ids["function-subnet"]
   private_endpoint_subnet_id       = module.networking.subnet_ids["pe-subnet"]
   vnet_id                          = module.networking.vnet_id

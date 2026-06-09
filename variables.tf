@@ -114,13 +114,26 @@ variable "storage_account_name_prefix" {
 variable "storage_container_names" {
   description = "Blob containers to create."
   type        = set(string)
-  default     = ["uploads", "exports"]
+  # health-records matches the blobTrigger path in the Azure Function (health-records/{userId}/{filename})
+  default     = ["health-records", "uploads", "exports"]
 }
 
 variable "function_app_name" {
   description = "Globally unique Function App name."
   type        = string
   default     = "health-fun"
+}
+
+variable "doc_intelligence_name" {
+  description = "Globally unique Azure AI Document Intelligence (Form Recognizer) account name."
+  type        = string
+  default     = "health-docai"
+}
+
+variable "acs_sender_address" {
+  description = "Sender email address for ACS email notifications (e.g. DoNotReply@xxxxxxxx.azurecomm.net). Set after ACS domain is provisioned."
+  type        = string
+  default     = "DoNotReply@AzureManagedDomain"
 }
 
 variable "communication_service_name" {

@@ -25,3 +25,8 @@ output "function_app_default_hostname" {
 output "communication_service_id" {
   value = module.communication.communication_service_id
 }
+
+output "doc_intelligence_endpoint" {
+  description = "Endpoint URL of the Azure AI Document Intelligence resource."
+  value       = module.doc_intelligence.endpoint
+}
