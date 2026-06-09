@@ -10,6 +10,12 @@ resource "azurerm_container_app_environment" "this" {
   infrastructure_subnet_id       = var.infrastructure_subnet_id
   internal_load_balancer_enabled = var.internal_load_balancer_enabled
   tags                           = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      infrastructure_resource_group_name
+    ]
+  }
 }
 
 resource "azurerm_container_app" "this" {
@@ -83,9 +89,10 @@ resource "azurerm_container_app" "this" {
     for_each = each.value.target_port == null ? [] : [each.value]
 
     content {
-      external_enabled = ingress.value.external_enabled
-      target_port      = ingress.value.target_port
-      transport        = "auto"
+      external_enabled          = ingress.value.external_enabled
+      target_port               = ingress.value.target_port
+      transport                 = "auto"
+      allow_insecure_connections = true
 
       traffic_weight {
         percentage      = 100

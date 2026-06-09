@@ -3,8 +3,10 @@ variable "resource_group_name" {
 }
 
 variable "location" {
-  type = string
+  type    = string
+  default = "global"
 }
+
 
 variable "communication_service_name" {
   type = string

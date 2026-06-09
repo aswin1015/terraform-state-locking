@@ -14,11 +14,18 @@ locals {
       cpu              = 0.5
       memory           = "1Gi"
       env = {
-        PORT = "5000"
+        PORT                     = "5000"
+        AZURE_CONTAINER_NAME     = "health-records"
+        FORM_RECOGNIZER_ENDPOINT = "https://aegis-docai-aswin3.cognitiveservices.azure.com/"
+        ACS_SENDER_ADDRESS       = "DoNotReply@c8e997ab-9edd-4288-8abd-922865066bf0.azurecomm.net"
+        TEST_NOTIFICATION_EMAIL  = "aswinas1015@gmail.com"
       }
       secrets = {
-        MONGODB_URI = module.cosmosdb.mongodb_connection_string
-        JWT_SECRET  = var.jwt_secret
+        MONGODB_URI                  = module.cosmosdb.mongodb_connection_string
+        JWT_SECRET                   = var.jwt_secret
+        AZURE_STORAGE_CONNECTION_STRING = module.storage.primary_connection_string
+        FORM_RECOGNIZER_KEY          = var.form_recognizer_key
+        ACS_CONNECTION_STRING        = module.communication.primary_connection_string
       }
     }
     "notification-worker" = {
@@ -115,7 +122,6 @@ module "communication" {
   source = "./modules/communication"
 
   resource_group_name        = module.resource_group.name
-  location                   = "global"
   communication_service_name = var.communication_service_name
   email_service_name         = var.email_service_name
   email_domain_name          = var.email_domain_name
@@ -123,25 +129,25 @@ module "communication" {
   tags                       = local.common_tags
 }
 
-module "function_app" {
-  source = "./modules/function-app"
-
-  resource_group_name              = module.resource_group.name
-  location                         = module.resource_group.location
-  name                             = var.function_app_name
-  storage_account_name             = module.storage.account_name
-  storage_account_access_key       = module.storage.primary_access_key
-  storage_connection_string        = module.storage.primary_connection_string
-  cosmosdb_connection_string       = module.cosmosdb.mongodb_connection_string
-  communication_service_connection = module.communication.primary_connection_string
-  acs_sender_address               = var.acs_sender_address
-  form_recognizer_endpoint         = module.doc_intelligence.endpoint
-  form_recognizer_key              = module.doc_intelligence.primary_key
-  vnet_integration_subnet_id       = module.networking.subnet_ids["function-subnet"]
-  private_endpoint_subnet_id       = module.networking.subnet_ids["pe-subnet"]
-  vnet_id                          = module.networking.vnet_id
-  tags                             = local.common_tags
-}
+# module "function_app" {
+#   source = "./modules/function-app"
+#
+#   resource_group_name              = module.resource_group.name
+#   location                         = module.resource_group.location
+#   name                             = var.function_app_name
+#   storage_account_name             = module.storage.account_name
+#   storage_account_access_key       = module.storage.primary_access_key
+#   storage_connection_string        = module.storage.primary_connection_string
+#   cosmosdb_connection_string       = module.cosmosdb.mongodb_connection_string
+#   communication_service_connection = module.communication.primary_connection_string
+#   acs_sender_address               = var.acs_sender_address
+#   form_recognizer_endpoint         = module.doc_intelligence.endpoint
+#   form_recognizer_key              = module.doc_intelligence.primary_key
+#   vnet_integration_subnet_id       = module.networking.subnet_ids["function-subnet"]
+#   private_endpoint_subnet_id       = module.networking.subnet_ids["pe-subnet"]
+#   vnet_id                          = module.networking.vnet_id
+#   tags                             = local.common_tags
+# }
 
 module "container_apps" {
   source = "./modules/container-apps"

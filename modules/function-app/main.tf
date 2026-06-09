@@ -14,7 +14,7 @@ resource "azurerm_linux_function_app" "this" {
   service_plan_id            = azurerm_service_plan.this.id
   storage_account_name       = var.storage_account_name
   storage_account_access_key = var.storage_account_access_key
-  virtual_network_subnet_id  = var.vnet_integration_subnet_id
+  virtual_network_subnet_id  = var.service_plan_sku_name == "Y1" ? null : var.vnet_integration_subnet_id
   https_only                 = true
   tags                       = var.tags
 
@@ -42,9 +42,9 @@ resource "azurerm_linux_function_app" "this" {
     # Storage — needed by the blobTrigger binding and the buildBlobUrl helper in index.js
     AZURE_STORAGE_CONNECTION_STRING  = var.storage_connection_string
     # VNet / runtime settings
-    WEBSITE_CONTENTOVERVNET          = "1"
+    WEBSITE_CONTENTOVERVNET          = var.service_plan_sku_name == "Y1" ? "0" : "1"
     WEBSITE_RUN_FROM_PACKAGE         = "1"
-    WEBSITE_VNET_ROUTE_ALL           = "1"
+    WEBSITE_VNET_ROUTE_ALL           = var.service_plan_sku_name == "Y1" ? "0" : "1"
   }
 }
 

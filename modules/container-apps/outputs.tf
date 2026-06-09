@@ -11,5 +11,5 @@ output "app_ids" {
 }
 
 output "app_fqdns" {
-  value = { for name, app in azurerm_container_app.this : name => app.latest_revision_fqdn }
+  value = { for name, app in azurerm_container_app.this : name => try(app.ingress[0].fqdn, "") }
 }

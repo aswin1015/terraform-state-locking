@@ -1,10 +1,11 @@
 resource "azurerm_cognitive_account" "this" {
-  name                = var.name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  kind                = "FormRecognizer"
-  sku_name            = var.sku_name
-  tags                = var.tags
+  name                  = var.name
+  location              = var.location
+  resource_group_name   = var.resource_group_name
+  kind                  = "FormRecognizer"
+  sku_name              = var.sku_name
+  custom_subdomain_name = var.name
+  tags                  = var.tags
 
   # Disable public network access; traffic only flows through the private endpoint
   public_network_access_enabled = false

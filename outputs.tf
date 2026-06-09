@@ -18,9 +18,9 @@ output "storage_account_name" {
   value = module.storage.account_name
 }
 
-output "function_app_default_hostname" {
-  value = module.function_app.default_hostname
-}
+# output "function_app_default_hostname" {
+#   value = module.function_app.default_hostname
+# }
 
 output "communication_service_id" {
   value = module.communication.communication_service_id

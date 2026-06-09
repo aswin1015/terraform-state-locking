@@ -53,7 +53,7 @@ variable "form_recognizer_key" {
 
 variable "service_plan_sku_name" {
   type    = string
-  default = "EP1"
+  default = "Y1"
 }
 
 variable "vnet_integration_subnet_id" {

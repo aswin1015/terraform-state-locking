@@ -47,7 +47,7 @@ variable "container_registry_password" {
 variable "apps" {
   type = map(object({
     image            = string
-    target_port      = number
+    target_port      = optional(number)
     external_enabled = bool
     min_replicas     = number
     max_replicas     = number
