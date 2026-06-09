@@ -1,5 +1,5 @@
 locals {
-  registry_enabled = var.container_registry_username != null && var.container_registry_password != null
+  registry_enabled = nonsensitive(var.container_registry_username != null && var.container_registry_password != null)
 }
 
 resource "azurerm_container_app_environment" "this" {
@@ -22,14 +22,20 @@ resource "azurerm_container_app" "this" {
   tags                         = var.tags
 
   dynamic "secret" {
-    for_each = merge(
-      each.value.secrets,
-      local.registry_enabled ? { REGISTRY_PASSWORD = var.container_registry_password } : {}
-    )
+    for_each = nonsensitive(toset(keys(each.value.secrets)))
 
     content {
-      name  = lower(replace(secret.key, "_", "-"))
-      value = secret.value
+      name  = lower(replace(secret.value, "_", "-"))
+      value = each.value.secrets[secret.value]
+    }
+  }
+
+  dynamic "secret" {
+    for_each = local.registry_enabled ? ["registry-password"] : []
+
+    content {
+      name  = secret.value
+      value = var.container_registry_password
     }
   }
 
@@ -63,11 +69,11 @@ resource "azurerm_container_app" "this" {
       }
 
       dynamic "env" {
-        for_each = each.value.secrets
+        for_each = nonsensitive(toset(keys(each.value.secrets)))
 
         content {
-          name        = env.key
-          secret_name = lower(replace(env.key, "_", "-"))
+          name        = env.value
+          secret_name = lower(replace(env.value, "_", "-"))
         }
       }
     }

@@ -14,7 +14,7 @@ resource "azurerm_subnet" "this" {
   virtual_network_name = azurerm_virtual_network.this.name
   address_prefixes     = each.value.address_prefixes
 
-  private_endpoint_network_policies_enabled = each.key == "pe-subnet" ? false : true
+  private_endpoint_network_policies = each.key == "pe-subnet" ? "Disabled" : "Enabled"
 
   dynamic "delegation" {
     for_each = each.value.delegation_service == null ? [] : [each.value]
