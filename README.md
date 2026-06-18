@@ -1,143 +1,174 @@
-# Health App Terraform
+# Aegis Health — Terraform Infrastructure
+## AKS + Azure Key Vault + ACR + KGateway
 
-Terraform configuration for deploying the Azure infrastructure needed by the health application.
+This Terraform configuration provisions all Azure infrastructure for **Aegis Health** — migrated from Azure Container Apps to a full **AKS** cluster.
 
-This stack uses local Terraform state. The `backend.tf` file is intentionally empty, so no Azure Storage remote backend or state locking is configured.
+---
 
-## What Is Included
+## Architecture
 
-### Resource Group
-
-- Creates the Azure resource group used by the whole application.
-- Applies common tags such as `environment`, `workload`, and any custom tags from `terraform.tfvars`.
-
-### Networking
-
-- Creates a virtual network.
-- Creates dedicated subnets for:
-  - Application Gateway
-  - Container Apps Environment
-  - Private Endpoints
-  - Function App VNet integration
-- Configures subnet delegation for Container Apps and Function App integration.
-- Disables private endpoint network policies on the private endpoint subnet.
-
-### Monitoring
-
-- Creates a Log Analytics Workspace.
-- Creates Application Insights connected to the workspace.
-- Supplies logging configuration for Azure Container Apps.
-
-### Cosmos DB
-
-- Creates a Cosmos DB account using the MongoDB API.
-- Creates the MongoDB database.
-- Disables public network access.
-- Creates a private endpoint for Cosmos DB.
-- Creates and links the private DNS zone for MongoDB private access.
-- Exposes the primary MongoDB connection string for the app containers and Function App.
-
-### Storage
-
-- Creates a private Azure Storage Account.
-- Creates blob containers from `storage_container_names`.
-- Disables public network access.
-- Creates a private endpoint for blob storage.
-- Creates and links the private DNS zone for blob private access.
-
-### Azure Communication Services
-
-- Creates an Azure Communication Services resource.
-- Creates an Email Communication Service.
-- Creates the configured email domain.
-- Associates the email domain with Communication Services.
-- Exposes the Communication Services connection string for the Function App.
-
-### Function App
-
-- Creates a Linux Azure Function App.
-- Creates the Function App service plan.
-- Enables system-assigned managed identity.
-- Configures Node.js runtime.
-- Injects application settings for:
-  - Cosmos DB MongoDB connection
-  - Communication Services connection
-  - VNet routing
-- Integrates the Function App with the VNet.
-- Creates a private endpoint and private DNS zone for the Function App.
-
-### Container Apps
-
-- Creates an Azure Container Apps Environment.
-- Deploys these container apps:
-  - `api-gateway`
-  - `notification-worker`
-  - `client`
-- Configures replicas, CPU, memory, ingress, environment variables, and secrets.
-- Uses the configured Azure Container Registry server and optional registry credentials.
-
-Default container images:
-
-```text
-insurancecr.azurecr.io/aegis-api-gateway:v1.0.6
-insurancecr.azurecr.io/aegis-notification-worker:v1.0.6
-insurancecr.azurecr.io/aegis-client:v1.0.6
+```
+Azure (aswin-rg / Central India)
+├── Azure Container Registry (ACR)       — aegisacraswin
+├── AKS Cluster                          — aegis-aks (3× Standard_D2s_v3)
+│   ├── OIDC Issuer enabled
+│   ├── Workload Identity enabled
+│   └── Key Vault CSI Driver add-on
+├── User Assigned Managed Identity       — aegis-dev-workload-id
+│   └── Federated Credential → AKS OIDC → K8s ServiceAccount
+├── Azure Key Vault                      — aegis-kv-aswin
+│   └── 9 secrets (MongoDB, JWT, Postgres, Storage, AI keys...)
+├── VNet (10.0.0.0/16)
+│   ├── aks-subnet    (10.0.0.0/22)
+│   └── pe-subnet     (10.0.10.0/24)
+├── Cosmos DB (MongoDB API)              — aegis-csdb-aswin
+├── Azure Blob Storage                   — aegishealthst...
+├── Azure AI Document Intelligence       — aegis-docai-aswin3
+├── Azure Communication Services         — aegiscs
+├── Log Analytics Workspace + App Insights
+└── KGateway (Helm) — Gateway API CRDs + kgateway controller
 ```
 
-### Application Gateway
+---
 
-- Creates a public IP address.
-- Creates an Application Gateway with WAF v2.
-- Routes HTTP traffic to the configured backend Container App.
-- Uses a health probe path, defaulting to `/`.
+## Modules
 
-## Default Network Layout
+| Module | Description | Status |
+|---|---|---|
+| `resource-group` | Azure Resource Group | ✅ Existing |
+| `networking` | VNet + Subnets (updated for AKS) | ✅ Updated |
+| `monitoring` | Log Analytics + App Insights | ✅ Existing |
+| `acr` | Azure Container Registry | 🆕 New |
+| `aks` | AKS cluster with OIDC + Workload Identity + CSI | 🆕 New |
+| `workload-identity` | Managed Identity + Federated Credential | 🆕 New |
+| `key-vault` | Key Vault + access policies + all secrets | 🆕 New |
+| `kgateway` | Helm: Gateway API CRDs + KGateway controller | 🆕 New |
+| `cosmosdb` | Cosmos DB for MongoDB API | ✅ Existing |
+| `storage` | Azure Blob Storage | ✅ Existing |
+| `doc-intelligence` | Azure AI Document Intelligence | ✅ Existing |
+| `communication` | Azure Communication Services | ✅ Existing |
 
-```text
-10.0.10.0/24  appgtw-subnet
-10.0.20.0/24  container-app-env
-10.0.30.0/24  pe-subnet
-10.0.40.0/24  function-subnet
-```
+---
 
-## Important Variables
+## Quick Start
 
-- `resource_group_name`: Azure resource group name.
-- `location`: Azure region.
-- `container_registry_server`: ACR login server.
-- `container_image_version`: Image tag used by all app containers.
-- `jwt_secret`: API Gateway JWT secret.
-- `cosmosdb_account_name`: Globally unique Cosmos DB account name.
-- `storage_account_name_prefix`: Globally unique storage account name prefix.
-- `function_app_name`: Globally unique Function App name.
-- `communication_service_name`: Communication Services resource name.
-- `email_service_name`: Email Communication Service resource name.
-- `app_gateway_backend_app_name`: Container App routed by Application Gateway.
-
-## How To Run
-
-From this directory:
+### Prerequisites
 
 ```bash
-terraform init
-terraform validate
-terraform plan
-terraform apply
+# Install tools
+winget install Microsoft.AzureCLI
+winget install Hashicorp.Terraform
+winget install Helm.Helm
+
+# Login
+az login
+az account set --subscription "<subscription-id>"
 ```
 
-To use the root `terraform.tfvars`, no extra flag is needed. Terraform loads it automatically.
+### 1. Set sensitive secrets via env vars
 
-For environment-specific tfvars:
+```powershell
+$env:TF_VAR_jwt_secret         = "your-strong-jwt-secret"
+$env:TF_VAR_postgres_password  = "YourPostgresPass2026!"
+$env:TF_VAR_gemini_api_key     = "your-gemini-key"
+$env:TF_VAR_azure_ai_key       = "your-azure-ai-key"
+$env:TF_VAR_azure_ai_endpoint  = "https://your-ai-foundry.cognitiveservices.azure.com/"
+```
+
+### 2. Initialize
 
 ```bash
-terraform plan -var-file=environments/dev/terraform.tfvars
-terraform apply -var-file=environments/dev/terraform.tfvars
+cd terraform-state-locking
+
+terraform init \
+  -backend-config="resource_group_name=aswin-rg" \
+  -backend-config="storage_account_name=aegishealthstorage" \
+  -backend-config="container_name=tfstate" \
+  -backend-config="key=terraform.tfstate"
 ```
 
-## Notes Before Apply
+### 3. Plan
 
-- Make sure you are logged in to Azure CLI with the right subscription.
-- Make sure globally unique names are available, especially Cosmos DB, Storage Account, and Function App names.
-- Make sure the container images exist in the configured registry.
-- If the registry is private, set `container_registry_username` and `container_registry_password` securely.
-- Since local state is used, keep `terraform.tfstate` safe and do not delete it after applying.
+```bash
+terraform plan -var-file="terraform.tfvars" -out=tfplan
+```
+
+### 4. Apply
+
+```bash
+terraform apply tfplan
+```
+
+### 5. Get kubectl credentials
+
+```bash
+az aks get-credentials --resource-group aswin-rg --name aegis-aks
+kubectl get nodes
+```
+
+### 6. Deploy K8s manifests
+
+After apply, update the K8s manifests with Terraform outputs:
+
+```bash
+# Get outputs
+terraform output acr_login_server            # → use as __ACR_NAME__
+terraform output workload_identity_client_id # → use in workload-identity-sa.yaml
+terraform output key_vault_name              # → use in secret-provider-class.yaml
+terraform output workload_identity_tenant_id # → use in secret-provider-class.yaml
+
+# Run the K8s provisioning script (it substitutes placeholders automatically)
+.\k8s\scripts\provision-aks.ps1
+```
+
+---
+
+## Sensitive Variables
+
+| Variable | Secret Name | Description |
+|---|---|---|
+| `jwt_secret` | `TF_VAR_JWT_SECRET` | JWT signing key for api-gateway |
+| `postgres_password` | `TF_VAR_POSTGRES_PASSWORD` | In-cluster PostgreSQL password |
+| `gemini_api_key` | `TF_VAR_GEMINI_API_KEY` | Google Gemini API key |
+| `azure_ai_key` | `TF_VAR_AZURE_AI_KEY` | Azure AI Foundry API key |
+| `azure_ai_endpoint` | `TF_VAR_AZURE_AI_ENDPOINT` | Azure AI Foundry endpoint URL |
+
+**Never commit secrets to git.** Use `TF_VAR_*` environment variables or a secrets manager.
+
+---
+
+## Key Outputs After Apply
+
+| Output | Used For |
+|---|---|
+| `acr_login_server` | `__ACR_NAME__` placeholder in K8s manifests |
+| `aks_cluster_name` | `az aks get-credentials` |
+| `aks_oidc_issuer_url` | Workload Identity federated credential |
+| `key_vault_name` | SecretProviderClass in K8s |
+| `key_vault_uri` | SecretProviderClass `keyvaultName` |
+| `workload_identity_client_id` | ServiceAccount annotation in K8s |
+| `workload_identity_tenant_id` | SecretProviderClass `tenantId` |
+
+---
+
+## CI/CD (GitHub Actions)
+
+The workflow at `.github/workflows/terraform.yml`:
+
+- **PR** → runs `terraform plan` and posts output as PR comment
+- **Push to main** → runs `terraform apply` (with manual approval gate)
+- **Manual trigger** → choose `plan`, `apply`, or `destroy`
+
+### Required GitHub Secrets
+
+```
+ARM_CLIENT_ID
+ARM_CLIENT_SECRET
+ARM_SUBSCRIPTION_ID
+ARM_TENANT_ID
+TF_VAR_JWT_SECRET
+TF_VAR_POSTGRES_PASSWORD
+TF_VAR_GEMINI_API_KEY
+TF_VAR_AZURE_AI_KEY
+TF_VAR_AZURE_AI_ENDPOINT
+```

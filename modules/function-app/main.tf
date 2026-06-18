@@ -29,22 +29,22 @@ resource "azurerm_linux_function_app" "this" {
   }
 
   app_settings = {
-    FUNCTIONS_WORKER_RUNTIME         = "node"
+    FUNCTIONS_WORKER_RUNTIME = "node"
     # CosmosDB — key name matches what index.js reads (process.env.COSMOS_MONGODB_URI)
-    COSMOS_MONGODB_URI               = var.cosmosdb_connection_string
+    COSMOS_MONGODB_URI = var.cosmosdb_connection_string
     # Azure Communication Services — both keys the function reads
     ACS_CONNECTION_STRING            = var.communication_service_connection
     COMMUNICATION_SERVICE_CONNECTION = var.communication_service_connection
     ACS_SENDER_ADDRESS               = var.acs_sender_address
     # Azure AI Document Intelligence (Form Recognizer)
-    FORM_RECOGNIZER_ENDPOINT         = var.form_recognizer_endpoint
-    FORM_RECOGNIZER_KEY              = var.form_recognizer_key
+    FORM_RECOGNIZER_ENDPOINT = var.form_recognizer_endpoint
+    FORM_RECOGNIZER_KEY      = var.form_recognizer_key
     # Storage — needed by the blobTrigger binding and the buildBlobUrl helper in index.js
-    AZURE_STORAGE_CONNECTION_STRING  = var.storage_connection_string
+    AZURE_STORAGE_CONNECTION_STRING = var.storage_connection_string
     # VNet / runtime settings
-    WEBSITE_CONTENTOVERVNET          = var.service_plan_sku_name == "Y1" ? "0" : "1"
-    WEBSITE_RUN_FROM_PACKAGE         = "1"
-    WEBSITE_VNET_ROUTE_ALL           = var.service_plan_sku_name == "Y1" ? "0" : "1"
+    WEBSITE_CONTENTOVERVNET  = var.service_plan_sku_name == "Y1" ? "0" : "1"
+    WEBSITE_RUN_FROM_PACKAGE = "1"
+    WEBSITE_VNET_ROUTE_ALL   = var.service_plan_sku_name == "Y1" ? "0" : "1"
   }
 }
 

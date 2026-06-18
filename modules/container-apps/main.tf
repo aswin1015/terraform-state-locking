@@ -89,9 +89,9 @@ resource "azurerm_container_app" "this" {
     for_each = each.value.target_port == null ? [] : [each.value]
 
     content {
-      external_enabled          = ingress.value.external_enabled
-      target_port               = ingress.value.target_port
-      transport                 = "auto"
+      external_enabled           = ingress.value.external_enabled
+      target_port                = ingress.value.target_port
+      transport                  = "auto"
       allow_insecure_connections = true
 
       traffic_weight {

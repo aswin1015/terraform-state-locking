@@ -2,59 +2,17 @@ locals {
   common_tags = merge(var.tags, {
     environment = var.environment
     workload    = var.workload_name
+    managed-by  = "terraform"
   })
 
-  container_apps = {
-    "api-gateway" = {
-      image            = "${var.container_registry_server}/aegis-api-gateway:${var.container_image_version}"
-      target_port      = 5000
-      external_enabled = true
-      min_replicas     = 1
-      max_replicas     = 3
-      cpu              = 0.5
-      memory           = "1Gi"
-      env = {
-        PORT                     = "5000"
-        AZURE_CONTAINER_NAME     = "health-records"
-        FORM_RECOGNIZER_ENDPOINT = "https://aegis-docai-aswin3.cognitiveservices.azure.com/"
-        ACS_SENDER_ADDRESS       = "DoNotReply@c8e997ab-9edd-4288-8abd-922865066bf0.azurecomm.net"
-        TEST_NOTIFICATION_EMAIL  = "aswinas1015@gmail.com"
-      }
-      secrets = {
-        MONGODB_URI                  = module.cosmosdb.mongodb_connection_string
-        JWT_SECRET                   = var.jwt_secret
-        AZURE_STORAGE_CONNECTION_STRING = module.storage.primary_connection_string
-        FORM_RECOGNIZER_KEY          = var.form_recognizer_key
-        ACS_CONNECTION_STRING        = module.communication.primary_connection_string
-      }
-    }
-    "notification-worker" = {
-      image            = "${var.container_registry_server}/aegis-notification-worker:${var.container_image_version}"
-      target_port      = null
-      external_enabled = false
-      min_replicas     = 1
-      max_replicas     = 2
-      cpu              = 0.5
-      memory           = "1Gi"
-      env              = {}
-      secrets = {
-        MONGODB_URI = module.cosmosdb.mongodb_connection_string
-      }
-    }
-    client = {
-      image            = "${var.container_registry_server}/aegis-client:${var.container_image_version}"
-      target_port      = 80
-      external_enabled = true
-      min_replicas     = 1
-      max_replicas     = 3
-      cpu              = 0.5
-      memory           = "1Gi"
-      env              = {}
-      secrets          = {}
-    }
-  }
+  # Resource name prefix used across all new modules
+  prefix = "${var.workload_name}-${var.environment}"
 }
 
+# ─── Data Sources ─────────────────────────────────────────────────────────────
+data "azurerm_client_config" "current" {}
+
+# ─── Resource Group ───────────────────────────────────────────────────────────
 module "resource_group" {
   source = "./modules/resource-group"
 
@@ -63,6 +21,7 @@ module "resource_group" {
   tags     = local.common_tags
 }
 
+# ─── Networking (VNet + Subnets for AKS) ─────────────────────────────────────
 module "networking" {
   source = "./modules/networking"
 
@@ -74,15 +33,85 @@ module "networking" {
   tags                = local.common_tags
 }
 
+# ─── Monitoring (Log Analytics + Application Insights) ────────────────────────
 module "monitoring" {
   source = "./modules/monitoring"
 
   resource_group_name = module.resource_group.name
   location            = module.resource_group.location
-  workspace_name      = "${var.workload_name}-${var.environment}-law"
+  workspace_name      = "${local.prefix}-law"
   tags                = local.common_tags
 }
 
+# ─── Azure Container Registry ─────────────────────────────────────────────────
+module "acr" {
+  source = "./modules/acr"
+
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  name                = var.acr_name
+  sku                 = var.acr_sku
+  tags                = local.common_tags
+}
+
+# ─── AKS Cluster (Workload Identity + Key Vault CSI add-on) ──────────────────
+module "aks" {
+  source = "./modules/aks"
+
+  resource_group_name        = module.resource_group.name
+  location                   = module.resource_group.location
+  cluster_name               = var.aks_cluster_name
+  kubernetes_version         = var.aks_kubernetes_version
+  node_count                 = var.aks_node_count
+  node_vm_size               = var.aks_node_vm_size
+  subnet_id                  = module.networking.subnet_ids["aks-subnet"]
+  log_analytics_workspace_id = module.monitoring.workspace_id
+  acr_id                     = module.acr.id
+  tags                       = local.common_tags
+}
+
+# ─── Workload Identity (Managed Identity + Federated Credentials) ─────────────
+module "workload_identity" {
+  source = "./modules/workload-identity"
+
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  identity_name       = "${local.prefix}-workload-id"
+  aks_oidc_issuer_url = module.aks.oidc_issuer_url
+  k8s_namespace       = var.k8s_namespace
+  k8s_service_account = var.k8s_service_account_name
+  tags                = local.common_tags
+}
+
+# ─── Azure Key Vault ──────────────────────────────────────────────────────────
+module "key_vault" {
+  source = "./modules/key-vault"
+
+  resource_group_name = module.resource_group.name
+  location            = module.resource_group.location
+  key_vault_name      = var.key_vault_name
+  tenant_id           = data.azurerm_client_config.current.tenant_id
+  # Grant the Workload Identity read access
+  workload_identity_object_id = module.workload_identity.principal_id
+  # Grant the deploying principal (Terraform runner) full access to load secrets
+  deployer_object_id = data.azurerm_client_config.current.object_id
+  tags               = local.common_tags
+
+  # ── Secrets to store ───────────────────────────────────────────────────────
+  secrets = {
+    "kv-mongodb-uri"        = module.cosmosdb.mongodb_connection_string
+    "kv-jwt-secret"         = var.jwt_secret
+    "kv-postgres-url"       = "postgresql://aegis:${var.postgres_password}@postgres-service:5432/imaging"
+    "kv-postgres-password"  = var.postgres_password
+    "kv-azure-storage-conn" = module.storage.primary_connection_string
+    "kv-gemini-api-key"     = var.gemini_api_key
+    "kv-azure-ai-endpoint"  = var.azure_ai_endpoint
+    "kv-azure-ai-key"       = var.azure_ai_key
+    "kv-appinsights-conn"   = module.monitoring.app_insights_connection_string
+  }
+}
+
+# ─── Cosmos DB for MongoDB API ────────────────────────────────────────────────
 module "cosmosdb" {
   source = "./modules/cosmosdb"
 
@@ -95,6 +124,7 @@ module "cosmosdb" {
   tags                = local.common_tags
 }
 
+# ─── Azure Blob Storage (medical images) ─────────────────────────────────────
 module "storage" {
   source = "./modules/storage"
 
@@ -107,6 +137,7 @@ module "storage" {
   tags                       = local.common_tags
 }
 
+# ─── Azure AI Document Intelligence ──────────────────────────────────────────
 module "doc_intelligence" {
   source = "./modules/doc-intelligence"
 
@@ -118,6 +149,7 @@ module "doc_intelligence" {
   tags                       = local.common_tags
 }
 
+# ─── Azure Communication Services ────────────────────────────────────────────
 module "communication" {
   source = "./modules/communication"
 
@@ -129,51 +161,10 @@ module "communication" {
   tags                       = local.common_tags
 }
 
-# module "function_app" {
-#   source = "./modules/function-app"
-#
-#   resource_group_name              = module.resource_group.name
-#   location                         = module.resource_group.location
-#   name                             = var.function_app_name
-#   storage_account_name             = module.storage.account_name
-#   storage_account_access_key       = module.storage.primary_access_key
-#   storage_connection_string        = module.storage.primary_connection_string
-#   cosmosdb_connection_string       = module.cosmosdb.mongodb_connection_string
-#   communication_service_connection = module.communication.primary_connection_string
-#   acs_sender_address               = var.acs_sender_address
-#   form_recognizer_endpoint         = module.doc_intelligence.endpoint
-#   form_recognizer_key              = module.doc_intelligence.primary_key
-#   vnet_integration_subnet_id       = module.networking.subnet_ids["function-subnet"]
-#   private_endpoint_subnet_id       = module.networking.subnet_ids["pe-subnet"]
-#   vnet_id                          = module.networking.vnet_id
-#   tags                             = local.common_tags
-# }
+# ─── KGateway (Gateway API CRDs + KGateway Helm) ─────────────────────────────
+module "kgateway" {
+  source = "./modules/kgateway"
 
-module "container_apps" {
-  source = "./modules/container-apps"
-
-  resource_group_name            = module.resource_group.name
-  location                       = module.resource_group.location
-  environment_name               = "${var.workload_name}-${var.environment}-env"
-  log_analytics_workspace_id     = module.monitoring.workspace_id
-  log_analytics_workspace_key    = module.monitoring.primary_shared_key
-  infrastructure_subnet_id       = module.networking.subnet_ids["container-app-env"]
-  internal_load_balancer_enabled = true
-  container_registry_server      = var.container_registry_server
-  container_registry_username    = var.container_registry_username
-  container_registry_password    = var.container_registry_password
-  apps                           = local.container_apps
-  tags                           = local.common_tags
-}
-
-module "app_gateway" {
-  source = "./modules/app-gateway"
-
-  resource_group_name = module.resource_group.name
-  location            = module.resource_group.location
-  name                = var.app_gateway_name
-  subnet_id           = module.networking.subnet_ids["appgtw-subnet"]
-  backend_fqdn        = module.container_apps.app_fqdns[var.app_gateway_backend_app_name]
-  backend_host_name   = module.container_apps.app_fqdns[var.app_gateway_backend_app_name]
-  tags                = local.common_tags
+  # Helm provider is configured via AKS kubeconfig above
+  depends_on = [module.aks]
 }

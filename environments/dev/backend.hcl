@@ -1,4 +1,4 @@
-resource_group_name  = "rg-tfstate"
-storage_account_name = "sttfstateexample001"
+resource_group_name  = "aswin-rg"
+storage_account_name = "aegishealthstorage"
 container_name       = "tfstate"
-key                  = "health-care-dev.tfstate"
+key                  = "dev/terraform.tfstate"

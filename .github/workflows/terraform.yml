@@ -33,11 +33,12 @@ env:
   ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
 
-  # Sensitive Terraform variables
-  TF_VAR_jwt_secret: ${{ secrets.TF_VAR_JWT_SECRET }}
-  TF_VAR_container_registry_username: ${{ secrets.TF_VAR_CONTAINER_REGISTRY_USERNAME }}
-  TF_VAR_container_registry_password: ${{ secrets.TF_VAR_CONTAINER_REGISTRY_PASSWORD }}
-  TF_VAR_form_recognizer_key: ${{ secrets.TF_VAR_FORM_RECOGNIZER_KEY }}
+  # Sensitive Terraform variables — set these in GitHub → Settings → Secrets → Actions
+  TF_VAR_jwt_secret:           ${{ secrets.TF_VAR_JWT_SECRET }}
+  TF_VAR_postgres_password:    ${{ secrets.TF_VAR_POSTGRES_PASSWORD }}
+  TF_VAR_gemini_api_key:       ${{ secrets.TF_VAR_GEMINI_API_KEY }}
+  TF_VAR_azure_ai_key:         ${{ secrets.TF_VAR_AZURE_AI_KEY }}
+  TF_VAR_azure_ai_endpoint:    ${{ secrets.TF_VAR_AZURE_AI_ENDPOINT }}
 
 permissions:
   contents: read
@@ -212,14 +213,21 @@ jobs:
         run: |
           echo "## 🚀 Terraform Apply Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| | |" >> $GITHUB_STEP_SUMMARY
+          echo "| Resource | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|" >> $GITHUB_STEP_SUMMARY
-          echo "| **App URL** | http://52.140.120.67 |" >> $GITHUB_STEP_SUMMARY
+          ACR=$(terraform output -raw acr_login_server 2>/dev/null || echo 'see outputs')
+          AKS=$(terraform output -raw aks_cluster_name 2>/dev/null || echo 'see outputs')
+          KV=$(terraform output -raw key_vault_name 2>/dev/null || echo 'see outputs')
+          echo "| **ACR** | $ACR |" >> $GITHUB_STEP_SUMMARY
+          echo "| **AKS Cluster** | $AKS |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Key Vault** | $KV |" >> $GITHUB_STEP_SUMMARY
           echo "| **Applied by** | @${{ github.actor }} |" >> $GITHUB_STEP_SUMMARY
           echo "| **Commit** | \`${{ github.sha }}\` |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Terraform Outputs" >> $GITHUB_STEP_SUMMARY
-          terraform output -no-color 2>/dev/null >> $GITHUB_STEP_SUMMARY || echo "_No outputs defined_" >> $GITHUB_STEP_SUMMARY
+          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          terraform output next_steps 2>/dev/null >> $GITHUB_STEP_SUMMARY || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
 
   # ─── Terraform Destroy (manual trigger only) ─────────────────────────────────
   destroy:

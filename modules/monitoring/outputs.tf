@@ -11,3 +11,14 @@ output "application_insights_connection_string" {
   value     = azurerm_application_insights.this.connection_string
   sensitive = true
 }
+
+# Alias used by main.tf for Key Vault secret population
+output "app_insights_connection_string" {
+  value     = azurerm_application_insights.this.connection_string
+  sensitive = true
+}
+
+output "app_insights_instrumentation_key" {
+  value     = azurerm_application_insights.this.instrumentation_key
+  sensitive = true
+}
