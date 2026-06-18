@@ -43,18 +43,20 @@ provider "azuread" {}
 provider "random" {}
 
 # ── Kubernetes + Helm providers wired to AKS after cluster is created ─────────
+# Use kube_admin_config (cert-based local admin). kube_config[0] returns empty
+# client cert/key under managed AAD + Azure RBAC, which breaks provider auth.
 provider "kubernetes" {
-  host                   = module.aks.kube_config.host
-  client_certificate     = base64decode(module.aks.kube_config.client_certificate)
-  client_key             = base64decode(module.aks.kube_config.client_key)
-  cluster_ca_certificate = base64decode(module.aks.kube_config.cluster_ca_certificate)
+  host                   = module.aks.kube_admin_config.host
+  client_certificate     = base64decode(module.aks.kube_admin_config.client_certificate)
+  client_key             = base64decode(module.aks.kube_admin_config.client_key)
+  cluster_ca_certificate = base64decode(module.aks.kube_admin_config.cluster_ca_certificate)
 }
 
 provider "helm" {
   kubernetes {
-    host                   = module.aks.kube_config.host
-    client_certificate     = base64decode(module.aks.kube_config.client_certificate)
-    client_key             = base64decode(module.aks.kube_config.client_key)
-    cluster_ca_certificate = base64decode(module.aks.kube_config.cluster_ca_certificate)
+    host                   = module.aks.kube_admin_config.host
+    client_certificate     = base64decode(module.aks.kube_admin_config.client_certificate)
+    client_key             = base64decode(module.aks.kube_admin_config.client_key)
+    cluster_ca_certificate = base64decode(module.aks.kube_admin_config.cluster_ca_certificate)
   }
 }

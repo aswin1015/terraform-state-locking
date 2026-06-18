@@ -29,11 +29,14 @@ resource "azurerm_key_vault_access_policy" "workload_identity" {
 }
 
 # ── Store secrets in Key Vault ────────────────────────────────────────────────
+# Keys (names like "kv-mongodb-uri") are not sensitive; values are.
+# toset(keys(nonsensitive(...))) lets for_each iterate over non-sensitive keys
+# while each secret's value is still read from the sensitive var.secrets map.
 resource "azurerm_key_vault_secret" "this" {
-  for_each = var.secrets
+  for_each = toset(keys(nonsensitive(var.secrets)))
 
   name         = each.key
-  value        = each.value
+  value        = var.secrets[each.key]
   key_vault_id = azurerm_key_vault.this.id
 
   depends_on = [azurerm_key_vault_access_policy.deployer]

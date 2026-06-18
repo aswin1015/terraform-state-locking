@@ -15,6 +15,15 @@ output "kube_config" {
   sensitive = true
 }
 
+# Cert-based local admin credentials. Required for the kubernetes/helm providers:
+# with managed AAD + Azure RBAC enabled, kube_config[0] has empty client cert/key
+# (token auth), so provider auth fails. kube_admin_config is populated because
+# local accounts are not disabled.
+output "kube_admin_config" {
+  value     = azurerm_kubernetes_cluster.this.kube_admin_config[0]
+  sensitive = true
+}
+
 output "kube_config_raw" {
   value     = azurerm_kubernetes_cluster.this.kube_config_raw
   sensitive = true

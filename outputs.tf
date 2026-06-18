@@ -62,16 +62,22 @@ output "doc_intelligence_endpoint" {
 output "next_steps" {
   description = "Commands to run after terraform apply."
   value       = <<-EOT
-    # 1. Get kubectl credentials
-    az aks get-credentials --resource-group ${module.resource_group.name} --name ${module.aks.cluster_name}
+    # 1. Get kubectl credentials (admin = cert-based, matches the TF providers)
+    az aks get-credentials --resource-group ${module.resource_group.name} --name ${module.aks.cluster_name} --admin
 
-    # 2. Substitute placeholders and apply K8s manifests
-    # (provision-aks.ps1 handles this automatically, but you can also do it manually)
-    # Replace __ACR_NAME__, __MANAGED_IDENTITY_CLIENT_ID__, __KEY_VAULT_NAME__, __TENANT_ID__
-    # in the k8s/ directory with the values above, then:
-    kubectl apply -f k8s/ --recursive
+    # 2. Build & push images to ACR
+    #    (build_and_push.ps1 — uses ACR login server: ${module.acr.login_server})
 
-    # 3. Check pod status
-    kubectl get pods -n aegis
+    # 3. Deploy the application via the Helm chart (helm/aegis-health)
+    helm upgrade --install aegis ./helm/aegis-health \
+      --namespace ${var.k8s_namespace} --create-namespace \
+      --set global.acrLoginServer=${module.acr.login_server} \
+      --set workloadIdentity.clientId=${module.workload_identity.client_id} \
+      --set keyVault.name=${module.key_vault.name} \
+      --set keyVault.tenantId=${data.azurerm_client_config.current.tenant_id}
+
+    # 4. Check rollout & get the public Gateway IP
+    kubectl get pods -n ${var.k8s_namespace}
+    kubectl get gateway aegis-gateway -n ${var.k8s_namespace} -o jsonpath='{.status.addresses[0].value}'
   EOT
 }

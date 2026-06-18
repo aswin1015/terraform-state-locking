@@ -49,7 +49,7 @@ resource "azurerm_kubernetes_cluster" "this" {
 
   # ── Azure RBAC for Kubernetes ─────────────────────────────────────────────
   azure_active_directory_role_based_access_control {
-    managed            = true
+    managed            = true  # Required in azurerm 3.x; defaults to true in 4.x
     azure_rbac_enabled = true
   }
 }
